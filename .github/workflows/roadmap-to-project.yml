@@ -1,0 +1,30 @@
+name: Roadmap to Project
+
+on:
+  workflow_call:
+    secrets:
+      ROADMAP_PROJECT_TOKEN:
+        required: true
+
+jobs:
+  roadmap:
+    name: Compile roadmap
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Roadmap to Project
+        uses: Ulvea-OCT/OCT-Workflows/.github/actions/roadmap-to-project@v1
+        env:
+          ROADMAP_PROJECT_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
+        with:
+          roadmap-files: |
+            roadmaps/*.md
+          project-owner: Ulvea-OCT
+          project-owner-type: organization
+          default-repo: ${{ github.repository }}

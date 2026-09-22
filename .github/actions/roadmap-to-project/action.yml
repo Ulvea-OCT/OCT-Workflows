@@ -1,0 +1,132 @@
+name: Roadmap Compiler
+description: Parse, schedule and apply a Markdown roadmap to GitHub Projects and Issues
+
+inputs:
+  roadmap-files:
+    description: Newline-separated roadmap files
+    required: true
+
+  max-parallel-tasks:
+    description: Maximum number of tasks scheduled in parallel
+    required: false
+    default: "4"
+
+  project-owner:
+    description: GitHub organization or user that owns the Project
+    required: false
+    default: ""
+
+  project-owner-type:
+    description: Project owner type
+    required: false
+    default: "organization"
+
+  default-repo:
+    description: Default repository receiving roadmap issues
+    required: false
+    default: ""
+
+  dry-run:
+    description: Validate and simulate without modifying GitHub
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.x"
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install -r "${{ github.action_path }}/requirements.txt"
+
+    - name: Prepare roadmap build directory
+      shell: bash
+      run: |
+        rm -rf .roadmap-build
+        mkdir -p .roadmap-build/parsed
+        mkdir -p .roadmap-build/scheduled
+
+    - name: Parse roadmaps
+      shell: bash
+      env:
+        ROADMAP_PATTERN: ${{ inputs.roadmap-files }}
+      run: |
+        shopt -s nullglob
+
+        files=( $ROADMAP_PATTERN )
+
+        if (( ${#files[@]} == 0 )); then
+          echo "ERROR: no roadmap files matched: $ROADMAP_PATTERN" >&2
+          exit 1
+        fi
+
+        roadmap_files=""
+        for file in "${files[@]}"; do
+          roadmap_files+="$file"$'\n'
+        done
+
+        python "${{ github.action_path }}/scripts/parse-roadmap.py" \
+          --files "$roadmap_files" \
+          --output-dir ".roadmap-build/parsed"
+
+    - name: Schedule roadmaps
+      shell: bash
+      env:
+        MAX_PARALLEL_TASKS: ${{ inputs.max-parallel-tasks }}
+      run: |
+        for input in .roadmap-build/parsed/*.json; do
+          name="$(basename "$input")"
+          output=".roadmap-build/scheduled/$name"
+
+          python - "$input" "$output" "$MAX_PARALLEL_TASKS" <<'PY'
+        import json
+        import sys
+        from pathlib import Path
+
+        input_path = Path(sys.argv[1])
+        output_path = Path(sys.argv[2])
+        max_parallel = int(sys.argv[3])
+
+        payload = json.loads(input_path.read_text(encoding="utf-8"))
+
+        payload.setdefault("scheduler", {})
+        payload["scheduler"]["max_parallel_tasks"] = max_parallel
+
+        output_path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        PY
+
+          python "${{ github.action_path }}/scripts/schedule-roadmap.py" \
+            --input "$input" \
+            --output "$output"
+        done
+
+    - name: Apply roadmaps
+      shell: bash
+      env:
+        GH_TOKEN: ${{ env.ROADMAP_PROJECT_TOKEN }}
+        PROJECT_OWNER: ${{ inputs.project-owner }}
+        PROJECT_OWNER_TYPE: ${{ inputs.project-owner-type }}
+        DEFAULT_REPO: ${{ inputs.default-repo }}
+      run: |
+        for json in .roadmap-build/scheduled/*.json; do
+          args=(
+            --json "$json"
+          )
+
+          if [[ "${{ inputs.dry-run }}" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+
+          python "${{ github.action_path }}/scripts/apply-roadmap.py" \
+            "${args[@]}"
+        done
