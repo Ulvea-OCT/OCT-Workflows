@@ -1,8 +1,18 @@
 # OCT-Workflows
 
-`OCT-Workflows` è il repository centrale di `Ulvea-OCT` per la logica GitHub Actions condivisa.
+Centralized GitHub Actions framework for the **Ulvea-OCT** organization.
 
-## Struttura
+`OCT-Workflows` contains the reusable automation logic shared by project repositories. Project-specific repositories consume this repository through versioned reusable workflows and composite actions.
+
+## Purpose
+
+The architecture separates responsibilities:
+
+- **OCT-Workflows** — centralized reusable workflows, composite actions, and automation scripts.
+- **OCT-Template** — bootstrap template for new repositories.
+- **Project repositories** — project-specific source code, configuration, and caller workflows.
+
+## Repository structure
 
 ```text
 OCT-Workflows/
@@ -21,20 +31,9 @@ OCT-Workflows/
 └── README.md
 ```
 
-## Principio
-
-| Componente | Responsabilità |
-|---|---|
-| `OCT-Workflows` | Logica condivisa |
-| `OCT-Template` | Bootstrap dei nuovi progetti |
-| Repository progetto | Codice e configurazione |
-| Workflow specifico | Logica esclusiva |
-
-Gli script non vengono copiati nei progetti.
-
 ## Reusable workflows
 
-Esempio:
+Reusable workflows are the entry points used by project repositories.
 
 ```yaml
 jobs:
@@ -43,125 +42,144 @@ jobs:
     secrets: inherit
 ```
 
-Il repository chiamante rimane il target dell'operazione.
+## Composite actions
 
-## Roadmap
+Composite actions contain shared implementation and run against the caller repository's checked-out workspace.
 
-Componenti:
+This avoids duplicating implementation in every project repository and avoids requiring a second checkout of the private `OCT-Workflows` repository.
 
-```text
-.github/workflows/roadmap.yml
-.github/actions/roadmap/
-├── action.yml
-└── scripts/
-    ├── parse-roadmap.py
-    ├── schedule-roadmap.py
-    └── apply-roadmap.py
-```
+## Scripts
 
-Pipeline:
+Python scripts belong to the relevant composite action and are not copied into project repositories.
 
-```text
-roadmap.md
-  ↓
-parse-roadmap.py
-  ↓
-schedule-roadmap.py
-  ↓
-apply-roadmap.py
-  ↓
-GitHub Issues
-  ↓
-GitHub Project
-```
+## Versioning
 
-### Parser
-
-`parse-roadmap.py` legge la roadmap Markdown, valida i metadati e produce la struttura delle attività.
-
-### Scheduler
-
-`schedule-roadmap.py` calcola la pianificazione rispettando dipendenze, durata, date e parallelismo.
-
-### Applier
-
-`apply-roadmap.py` gestisce Issues, labels, Project organizzativo, custom fields, date, dipendenze e viste.
-
-## Versionamento
-
-I progetti devono usare una versione stabile:
+Project repositories should consume stable major versions:
 
 ```yaml
 uses: Ulvea-OCT/OCT-Workflows/.github/workflows/roadmap.yml@v1
 ```
 
-Evitare `@main` nei progetti.
+Avoid using `@main` in production workflows.
 
-Le modifiche incompatibili devono poter essere pubblicate in una nuova major, ad esempio `v2`.
-
-## Nuovi workflow
-
-Un workflow comune va in:
+Breaking changes should be introduced under a new major version:
 
 ```text
-.github/workflows/<workflow>.yml
+v1
+v2
 ```
 
-e dovrebbe essere un reusable workflow quando deve essere usato da più repository.
+## Design principles
 
-## Nuove actions
+1. Centralize shared logic.
+2. Keep project repositories lightweight.
+3. Do not hard-code a specific project repository into reusable workflows.
+4. Use `github.repository` for the calling repository when a target repository is required.
+5. Keep organization-level configuration in organization variables and secrets where appropriate.
+6. Prefer reusable workflows for orchestration and composite actions for implementation.
+7. Version reusable interfaces.
+8. Keep project-specific behavior in the project repository.
 
-Le composite actions comuni vanno sotto:
+## Roadmap automation
+
+The roadmap workflow is responsible for:
+
+1. Reading a roadmap from the caller repository.
+2. Parsing task metadata.
+3. Scheduling tasks while respecting dependencies and parallelism.
+4. Creating or updating GitHub Issues.
+5. Creating or updating an organization-owned GitHub Project.
+6. Creating and maintaining project fields and roadmap metadata.
+7. Applying relationships such as dependencies.
+
+The implementation is centralized so improvements can be released through the reusable workflow version selected by each project.
+
+## Configuration
+
+Typical organization-level configuration:
 
 ```text
-.github/actions/
+ROADMAP_PROJECT_OWNER=Ulvea-OCT
+ROADMAP_PROJECT_OWNER_TYPE=organization
 ```
 
-## Workflow specifici
-
-La logica esclusiva di un singolo progetto rimane nella repository del progetto.
-
-## Configurazione
-
-Non hard-codificare i nomi dei progetti.
-
-Variabili Roadmap previste:
+The target repository should normally come from:
 
 ```text
-ROADMAP_PROJECT_OWNER
-ROADMAP_PROJECT_OWNER_TYPE
+GITHUB_REPOSITORY
 ```
 
-Il repository target è:
+rather than being hard-coded.
 
-```text
-github.repository
-```
-
-## Secrets
-
-Secret previsto:
+If the automation requires a GitHub token, use an organization secret such as:
 
 ```text
 ROADMAP_PROJECT_TOKEN
 ```
 
-Il caller può usare `secrets: inherit`.
+Centralizing a secret does not increase the permissions of the underlying token. The token must still have access to every repository and organization resource required by the automation.
 
-Il secret distribuisce il token ma non ne modifica i permessi.
+For a larger organization, consider using a GitHub App instead of a repository-scoped PAT.
 
-## Regola
+## Access and security
 
-Se una logica deve essere condivisa da più repository → `OCT-Workflows`.
+`OCT-Workflows` is infrastructure and should be protected accordingly.
 
-Se è esclusiva di un progetto → repository del progetto.
+Recommended controls include:
 
-## Rapporto con `OCT-Template`
+- Pull requests required for changes to `main`.
+- At least one approval.
+- Required CI checks once stable checks exist.
+- Conversation resolution.
+- No force pushes.
+- No branch deletion.
+- Limited administrative bypass.
+- Additional security checks as the organization matures.
 
-Il template contiene i caller necessari al bootstrap. Gli script rimangono esclusivamente in `OCT-Workflows`.
+Organization-level rulesets should provide the common baseline. Repository-specific rulesets may add stricter requirements.
 
-## Retroattività
+## Relationship with OCT-Template
 
-Modificare `OCT-Template` non modifica automaticamente i repository già creati.
+`OCT-Template` provides the initial repository structure and caller workflows.
 
-La logica comune deve quindi vivere in `OCT-Workflows`. Un eventuale sistema di sincronizzazione dei file locali è una funzionalità futura.
+It should not contain copies of the Python implementation from this repository.
+
+Example caller workflow:
+
+```yaml
+name: Roadmap
+
+on:
+  push:
+    paths:
+      - "roadmaps/**"
+  workflow_dispatch:
+
+jobs:
+  roadmap:
+    uses: Ulvea-OCT/OCT-Workflows/.github/workflows/roadmap.yml@v1
+    secrets: inherit
+```
+
+Changes to `OCT-Template` do not retroactively modify repositories previously created from it. Ongoing shared behavior must therefore live in `OCT-Workflows`.
+
+## Development workflow
+
+A typical change follows this process:
+
+1. Create a branch in `OCT-Workflows`.
+2. Implement or update the reusable workflow/action.
+3. Test the workflow against a suitable project repository.
+4. Open a pull request.
+5. Merge into `main`.
+6. Update the relevant version tag when releasing a compatible change.
+7. Create a new major version for breaking changes.
+
+## Related repositories
+
+- **OCT-Template** — repository bootstrap/template.
+- **Project repositories** — repositories consuming the framework.
+
+## Status
+
+This repository is the central automation layer for the Ulvea-OCT GitHub repository architecture.
