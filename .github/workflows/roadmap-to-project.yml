@@ -2,6 +2,13 @@ name: Roadmap to Project
 
 on:
   workflow_call:
+    inputs:
+      dry_run:
+        description: "Parse and schedule only; do not modify GitHub"
+        required: false
+        type: boolean
+        default: true
+
     secrets:
       ROADMAP_PROJECT_TOKEN:
         required: true
@@ -24,7 +31,8 @@ jobs:
           ROADMAP_PROJECT_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
         with:
           roadmap-files: |
-            roadmaps/*.md
+            roadmap/*.md
           project-owner: Ulvea-OCT
           project-owner-type: organization
           default-repo: ${{ github.repository }}
+          dry-run: ${{ inputs.dry_run }}
