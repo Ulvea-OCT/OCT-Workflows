@@ -642,11 +642,6 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    if not token:
-        print("ERROR: GH_TOKEN or GITHUB_TOKEN is required", file=sys.stderr)
-        return 2
-
     project_owner = os.environ.get("PROJECT_OWNER") or os.environ.get("GITHUB_REPOSITORY_OWNER")
     project_owner_type = owner_kind(os.environ.get("PROJECT_OWNER_TYPE", "organization"))
     default_repo = os.environ.get("DEFAULT_REPO") or os.environ.get("GITHUB_REPOSITORY")
@@ -654,7 +649,6 @@ def main() -> int:
     if not default_repo or "/" not in default_repo:
         print("ERROR: DEFAULT_REPO or GITHUB_REPOSITORY must be owner/repository", file=sys.stderr)
         return 2
-
     if not project_owner:
         print("ERROR: PROJECT_OWNER is required", file=sys.stderr)
         return 2
@@ -665,8 +659,6 @@ def main() -> int:
     title = payload["project"]
     roadmap = payload["roadmap"]
     tasks = payload["issues"]
-
-    gh = GitHubClient(token)
 
     print("=" * 60)
     print(f"Roadmap: {roadmap}")
@@ -679,24 +671,66 @@ def main() -> int:
     print(f"Mode:    {'DRY RUN' if args.dry_run else 'APPLY'}")
     print("=" * 60)
 
+    # DRY RUN is deliberately API-free: no token, REST, or GraphQL calls.
     if args.dry_run:
-        project = find_project(gh, project_owner, project_owner_type, title)
-        if project:
-            print(f"Project exists: #{project['number']} {project['url']}")
-        else:
-            print(f"Project would be created: {title}")
-    else:
-        owner_id = get_owner_node_id(gh, project_owner, project_owner_type)
-        project = find_project(gh, project_owner, project_owner_type, title)
-        if project:
-            print(f"✓ Project exists: #{project['number']} {project['url']}")
-        else:
-            project = create_project(gh, owner_id, title)
-            print(f"✓ Project created: #{project['number']} {project['url']}")
-        update_project_description(gh, project["id"], title, roadmap)
+        field_specs = {
+            "Priority": ("SINGLE_SELECT", sorted({str(t["priority"]) for t in tasks})),
+            "Phase": ("SINGLE_SELECT", sorted({str(t["phase"]) for t in tasks})),
+            "Gate": ("SINGLE_SELECT", sorted({str(t["gate"]) for t in tasks})),
+            "Workstream": ("SINGLE_SELECT", sorted({str(t["workstream"]) for t in tasks})),
+            "Risk": ("SINGLE_SELECT", sorted({str(t["risk"]) for t in tasks})),
+            "Effort": ("SINGLE_SELECT", sorted({str(t["effort"]) for t in tasks})),
+            "Start": ("DATE", None),
+            "Target": ("DATE", None),
+            "Owners": ("NUMBER", None),
+        }
 
-    # Define the execution fields. Status is the built-in field and is left
-    # alone; these are roadmap-owned custom fields.
+        print(f"Project would be created or updated: {title}")
+        print("\nPROJECT")
+        print("  [would create/update] Project")
+        print("  [would update] Project description")
+        for name in field_specs:
+            print(f"  [would create/update] field: {name}")
+        print("  [would create/configure] Roadmap view")
+
+        print("\nISSUES")
+        for task in tasks:
+            repo = task.get("repo") or default_repo
+            issue_title = f"{task['id']} — {task['title']}"
+            print(f"  [would create/update] {repo} :: {issue_title}")
+
+        print("\nPROJECT ITEMS")
+        for task in tasks:
+            repo = task.get("repo") or default_repo
+            issue_title = f"{task['id']} — {task['title']}"
+            print(f"  [would add/update] {repo} :: {issue_title}")
+
+        print("\nDEPENDENCIES")
+        for task in tasks:
+            for blocker_id in task.get("blocked_by") or []:
+                print(f"  [would add] {task['id']} blocked by {blocker_id}")
+
+        print("\nDONE")
+        print("Dry run complete. No GitHub API calls or mutations were performed.")
+        return 0
+
+    # APPLY
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if not token:
+        print("ERROR: GH_TOKEN or GITHUB_TOKEN is required", file=sys.stderr)
+        return 2
+
+    gh = GitHubClient(token)
+
+    owner_id = get_owner_node_id(gh, project_owner, project_owner_type)
+    project = find_project(gh, project_owner, project_owner_type, title)
+    if project:
+        print(f"✓ Project exists: #{project['number']} {project['url']}")
+    else:
+        project = create_project(gh, owner_id, title)
+        print(f"✓ Project created: #{project['number']} {project['url']}")
+    update_project_description(gh, project["id"], title, roadmap)
+
     field_specs = {
         "Priority": ("SINGLE_SELECT", sorted({str(t["priority"]) for t in tasks})),
         "Phase": ("SINGLE_SELECT", sorted({str(t["phase"]) for t in tasks})),
@@ -709,94 +743,51 @@ def main() -> int:
         "Owners": ("NUMBER", None),
     }
 
-    fields: dict[str, dict[str, Any]] = {}
-    if not args.dry_run:
-        for name, (dtype, options) in field_specs.items():
-            fields[name] = ensure_field(gh, project["id"], name, dtype, options)
-            print(f"✓ field ready: {name}")
+    fields = {}
+    for name, (dtype, options) in field_specs.items():
+        fields[name] = ensure_field(gh, project["id"], name, dtype, options)
+        print(f"✓ field ready: {name}")
 
-        ensure_roadmap_view(gh, project["id"], fields, args.dry_run)
+    ensure_roadmap_view(gh, project["id"], fields, False)
 
-    issue_map: dict[str, dict[str, Any]] = {}
-    project_item_ids: dict[str, str] = {}
+    issue_map = {}
+    project_item_ids = {}
 
     print("\nISSUES")
     for task in tasks:
-        issue = ensure_issue(gh, task, roadmap, default_repo, args.dry_run)
+        issue = ensure_issue(gh, task, roadmap, default_repo, False)
         issue_map[task["id"]] = issue
 
-    if not args.dry_run:
-        existing_items = project_items(gh, project["id"])
-        print("\nPROJECT ITEMS")
-        for task in tasks:
-            issue = issue_map[task["id"]]
-            item_id = ensure_project_item(
-                gh,
-                project["id"],
-                issue["node_id"],
-                existing_items,
-                args.dry_run,
-            )
-            project_item_ids[task["id"]] = item_id
-            # Keep our in-memory list current so duplicate calls in one run
-            # cannot add the same issue twice.
-            existing_items.append({
-                "id": item_id,
-                "content": {"id": issue["node_id"]},
-            })
-            print(f"  ✓ {task['id']} -> project item")
+    existing_items = project_items(gh, project["id"])
+    print("\nPROJECT ITEMS")
+    for task in tasks:
+        issue = issue_map[task["id"]]
+        item_id = ensure_project_item(gh, project["id"], issue["node_id"], existing_items, False)
+        project_item_ids[task["id"]] = item_id
+        existing_items.append({"id": item_id, "content": {"id": issue["node_id"]}})
+        print(f"  ✓ {task['id']} -> project item")
 
-            for field_name, value in {
-                "Priority": task["priority"],
-                "Phase": task["phase"],
-                "Gate": task["gate"],
-                "Workstream": task["workstream"],
-                "Risk": task["risk"],
-                "Effort": task["effort"],
-                "Start": task.get("scheduled_start", task["start"]),
-                "Target": task.get("scheduled_target", task["target"]),
-                "Owners": task.get("owners", 0),
-            }.items():
-                set_field(
-                    gh,
-                    project["id"],
-                    item_id,
-                    fields[field_name],
-                    value,
-                    args.dry_run,
-                )
+        for field_name, value in {
+            "Priority": task["priority"], "Phase": task["phase"], "Gate": task["gate"],
+            "Workstream": task["workstream"], "Risk": task["risk"], "Effort": task["effort"],
+            "Start": task.get("scheduled_start", task["start"]),
+            "Target": task.get("scheduled_target", task["target"]),
+            "Owners": task.get("owners", 0),
+        }.items():
+            set_field(gh, project["id"], item_id, fields[field_name], value, False)
 
     print("\nDEPENDENCIES")
     for task in tasks:
         for blocker_id in task.get("blocked_by") or []:
             blocked_issue = issue_map[task["id"]]
             blocker_issue = issue_map.get(blocker_id)
-
             if not blocker_issue:
-                raise GitHubError(
-                    f"{task['id']} depends on unknown roadmap ID '{blocker_id}'"
-                )
-
-            if args.dry_run:
-                print(
-                    f"  [add] {task['id']} blocked by {blocker_id}"
-                )
-                continue
-
-            add_dependency(
-                gh,
-                task.get("repo") or default_repo,
-                blocked_issue["number"],
-                blocker_issue["id"],
-                args.dry_run,
-            )
+                raise GitHubError(f"{task['id']} depends on unknown roadmap ID '{blocker_id}'")
+            add_dependency(gh, task.get("repo") or default_repo, blocked_issue["number"], blocker_issue["id"], False)
 
     print("\nDONE")
-    if args.dry_run:
-        print("Dry run complete. No GitHub mutations were performed.")
-    else:
-        print(f"Project: {project['url']}")
-        print(f"Applied {len(tasks)} roadmap task(s).")
+    print(f"Project: {project['url']}")
+    print(f"Applied {len(tasks)} roadmap task(s).")
     return 0
 
 
