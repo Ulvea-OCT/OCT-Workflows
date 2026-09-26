@@ -278,15 +278,36 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    files = [
-        Path(line.strip())
-        for line in args.files.splitlines()
-        if line.strip()
-    ]
+files = []
 
-    if not files:
-        print("ERROR: no roadmap files supplied", file=sys.stderr)
-        return 1
+for line in args.files.splitlines():
+    pattern = line.strip()
+
+    if not pattern:
+        continue
+
+    path = Path(pattern)
+
+    # Expand glob patterns such as:
+    #   roadmaps/*.md
+    #   roadmaps/*-roadmap.md
+    if any(char in pattern for char in "*?["):
+        matches = sorted(Path(".").glob(pattern))
+
+        if not matches:
+            print(
+                f"ERROR: roadmap pattern matched no files: {pattern}",
+                file=sys.stderr,
+            )
+            return 1
+
+        files.extend(matches)
+    else:
+        files.append(path)
+
+if not files:
+    print("ERROR: no roadmap files supplied", file=sys.stderr)
+    return 1
 
     failed = False
 
