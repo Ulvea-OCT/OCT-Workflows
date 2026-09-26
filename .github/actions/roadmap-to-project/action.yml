@@ -29,7 +29,7 @@ inputs:
   dry-run:
     description: Validate and simulate without modifying GitHub
     required: false
-    default: "false"
+    default: "true"
 
 runs:
   using: composite
@@ -56,24 +56,10 @@ runs:
     - name: Parse roadmaps
       shell: bash
       env:
-        ROADMAP_PATTERN: ${{ inputs.roadmap-files }}
+        ROADMAP_FILES: ${{ inputs.roadmap-files }}
       run: |
-        shopt -s nullglob
-
-        files=( $ROADMAP_PATTERN )
-
-        if (( ${#files[@]} == 0 )); then
-          echo "ERROR: no roadmap files matched: $ROADMAP_PATTERN" >&2
-          exit 1
-        fi
-
-        roadmap_files=""
-        for file in "${files[@]}"; do
-          roadmap_files+="$file"$'\n'
-        done
-
         python "${{ github.action_path }}/scripts/parse-roadmap.py" \
-          --files "$roadmap_files" \
+          --files "$ROADMAP_FILES" \
           --output-dir ".roadmap-build/parsed"
 
     - name: Schedule roadmaps
@@ -94,13 +80,19 @@ runs:
         output_path = Path(sys.argv[2])
         max_parallel = int(sys.argv[3])
 
-        payload = json.loads(input_path.read_text(encoding="utf-8"))
+        payload = json.loads(
+            input_path.read_text(encoding="utf-8")
+        )
 
         payload.setdefault("scheduler", {})
         payload["scheduler"]["max_parallel_tasks"] = max_parallel
 
         output_path.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+            json.dumps(
+                payload,
+                indent=2,
+                ensure_ascii=False
+            ) + "\n",
             encoding="utf-8",
         )
         PY
@@ -111,6 +103,7 @@ runs:
         done
 
     - name: Apply roadmaps
+      if: ${{ inputs.dry-run != true }}
       shell: bash
       env:
         GH_TOKEN: ${{ env.ROADMAP_PROJECT_TOKEN }}
@@ -119,14 +112,17 @@ runs:
         DEFAULT_REPO: ${{ inputs.default-repo }}
       run: |
         for json in .roadmap-build/scheduled/*.json; do
-          args=(
-            --json "$json"
-          )
-
-          if [[ "${{ inputs.dry-run }}" == "true" ]]; then
-            args+=(--dry-run)
-          fi
-
           python "${{ github.action_path }}/scripts/apply-roadmap.py" \
-            "${args[@]}"
+            --json "$json"
         done
+
+    - name: Dry run summary
+      if: ${{ inputs.dry-run == true }}
+      shell: bash
+      run: |
+        echo "=============================================="
+        echo "ROADMAP DRY RUN"
+        echo "=============================================="
+        echo "No GitHub Issues or Projects were modified."
+        echo "Parsed and scheduled roadmap files:"
+        ls -la .roadmap-build/scheduled/
