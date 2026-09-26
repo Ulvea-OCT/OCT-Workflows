@@ -26,12 +26,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Roadmap to Project
-        uses: Ulvea-OCT/OCT-Workflows/.github/actions/roadmap-to-project@v1
+        uses: Ulvea-OCT/OCT-Workflows/.github/actions/roadmap-to-project@v1.1
         env:
           ROADMAP_PROJECT_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
         with:
           roadmap-files: |
-            roadmap/*.md
+            roadmaps/*.md
           project-owner: Ulvea-OCT
           project-owner-type: organization
           default-repo: ${{ github.repository }}
