@@ -25,6 +25,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Verify organization secret
+        shell: bash
+        env:
+          ROADMAP_PROJECT_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
+        run: |
+          echo "Token present: ${ROADMAP_PROJECT_TOKEN:+YES}"
+          echo "Token length: ${#ROADMAP_PROJECT_TOKEN}"
+
+          curl -sS \
+            -o /tmp/user.json \
+            -w "HTTP_STATUS:%{http_code}\n" \
+            -H "Authorization: Bearer $ROADMAP_PROJECT_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/user
+
+        cat /tmp/user.json
+
       - name: Verify token in runner
         shell: bash
         env:
