@@ -40,7 +40,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/user
 
-        cat /tmp/user.json
+          cat /tmp/user.json
 
       - name: Verify token in runner
         shell: bash
