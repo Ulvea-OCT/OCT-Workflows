@@ -102,6 +102,29 @@ runs:
             --output "$output"
         done
 
+    - name: Verify GitHub token
+      if: ${{ inputs.dry-run != 'true' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ env.ROADMAP_PROJECT_TOKEN }}
+      run: |
+        if [[ -z "$GH_TOKEN" ]]; then
+          echo "ERROR: GH_TOKEN is empty"
+          exit 1
+        fi
+
+        echo "GH_TOKEN is present"
+        echo "Token length: ${#GH_TOKEN}"
+
+        response=$(curl -sS \
+          -w "\nHTTP_STATUS:%{http_code}" \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer $GH_TOKEN" \
+          -H "X-GitHub-Api-Version: 2026-03-10" \
+          https://api.github.com/user)
+
+        echo "$response"
+
     - name: Apply roadmaps
       if: ${{ inputs.dry-run != 'true' }}
       shell: bash
