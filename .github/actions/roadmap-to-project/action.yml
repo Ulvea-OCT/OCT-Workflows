@@ -103,7 +103,7 @@ runs:
         done
 
     - name: Apply roadmaps
-      if: ${{ inputs.dry-run != true }}
+      if: ${{ inputs.dry-run != 'true' }}
       shell: bash
       env:
         GH_TOKEN: ${{ env.ROADMAP_PROJECT_TOKEN }}
@@ -117,7 +117,7 @@ runs:
         done
 
     - name: Dry run summary
-      if: ${{ inputs.dry-run == true }}
+      if: ${{ inputs.dry-run == 'true' }}
       shell: bash
       run: |
         echo "=============================================="
