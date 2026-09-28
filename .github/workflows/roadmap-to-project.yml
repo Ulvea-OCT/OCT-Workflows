@@ -26,7 +26,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Roadmap to Project
-        uses: Ulvea-OCT/OCT-Workflows/.github/actions/roadmap-to-project@v0.1
+        uses: Ulvea-OCT/OCT-Workflows/.github/actions/roadmap-to-project@v0.2
         env:
           ROADMAP_PROJECT_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
         with:
