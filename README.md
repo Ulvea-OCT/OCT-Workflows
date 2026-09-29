@@ -1,185 +1,194 @@
-# OCT-Workflows
+# OCT Workflows
 
-Centralized GitHub Actions framework for the **Ulvea-OCT** organization.
+This repository contains the shared GitHub Actions workflows used across OCT
+projects.
 
-`OCT-Workflows` contains the reusable automation logic shared by project repositories. Project-specific repositories consume this repository through versioned reusable workflows and composite actions.
+The purpose of this repository is to centralize workflow implementation,
+versioning, and technical documentation so that individual project
+repositories can consume stable, reusable workflow versions.
 
-## Purpose
+## Repository
 
-The architecture separates responsibilities:
-
-- **OCT-Workflows** — centralized reusable workflows, composite actions, and automation scripts.
-- **OCT-Template** — bootstrap template for new repositories.
-- **Project repositories** — project-specific source code, configuration, and caller workflows.
-
-## Repository structure
+The shared workflow repository is:
 
 ```text
-OCT-Workflows/
-├── .github/
-│   ├── workflows/
-│   │   ├── roadmap.yml
-│   │   └── ...
-│   └── actions/
-│       ├── roadmap/
-│       │   ├── action.yml
-│       │   └── scripts/
-│       │       ├── parse-roadmap.py
-│       │       ├── schedule-roadmap.py
-│       │       └── apply-roadmap.py
-│       └── ...
-└── README.md
+Ulvea-OCT/workflows
 ```
 
-## Reusable workflows
+Project repositories should consume workflows from this repository using an
+explicit Git tag.
 
-Reusable workflows are the entry points used by project repositories.
+## Available Workflows
 
-```yaml
-jobs:
-  roadmap:
-    uses: Ulvea-OCT/OCT-Workflows/.github/workflows/roadmap.yml@v1
-    secrets: inherit
+| Workflow | Purpose | Current version |
+|---|---|---:|
+| Roadmap to GitHub Project | Parses, validates, schedules and optionally applies Markdown roadmaps to GitHub Issues and Projects | v1.0 |
+
+Additional workflows can be added to this repository as the OCT automation
+library evolves.
+
+## Workflow Architecture
+
+A reusable workflow may be composed of:
+
+- a reusable workflow under `.github/workflows/`;
+- composite actions under `.github/actions/`;
+- Python or other supporting scripts;
+- configuration and dependency files.
+
+A project repository normally contains only the caller workflow. The
+implementation remains centralized in this repository.
+
+For example:
+
+```text
+Project repository
+└── .github/
+    └── workflows/
+        └── roadmap-to-project.yml
+                    │
+                    ▼
+Ulvea-OCT/workflows
+└── .github/workflows/
+    └── roadmap-to-project.yml
+                    │
+                    ▼
+            shared implementation
 ```
-
-## Composite actions
-
-Composite actions contain shared implementation and run against the caller repository's checked-out workspace.
-
-This avoids duplicating implementation in every project repository and avoids requiring a second checkout of the private `OCT-Workflows` repository.
-
-## Scripts
-
-Python scripts belong to the relevant composite action and are not copied into project repositories.
 
 ## Versioning
 
-Project repositories should consume stable major versions:
+Workflows are consumed through Git tags.
+
+Example:
 
 ```yaml
-uses: Ulvea-OCT/OCT-Workflows/.github/workflows/roadmap.yml@v1
+uses: Ulvea-OCT/workflows/.github/workflows/roadmap-to-project.yml@v1.0
 ```
 
-Avoid using `@main` in production workflows.
+The tag is the version contract between the workflow library and consuming
+repositories.
 
-Breaking changes should be introduced under a new major version:
+Existing projects should not depend on `@main` for production automation.
+Changes should be released through a new version tag.
 
-```text
-v1
-v2
-```
+When a new compatible release is available, consuming repositories can
+explicitly update their `uses:` reference.
 
-## Design principles
+## Roadmap to GitHub Project
 
-1. Centralize shared logic.
-2. Keep project repositories lightweight.
-3. Do not hard-code a specific project repository into reusable workflows.
-4. Use `github.repository` for the calling repository when a target repository is required.
-5. Keep organization-level configuration in organization variables and secrets where appropriate.
-6. Prefer reusable workflows for orchestration and composite actions for implementation.
-7. Version reusable interfaces.
-8. Keep project-specific behavior in the project repository.
+The Roadmap to GitHub Project workflow processes Markdown roadmap files and
+can:
 
-## Roadmap automation
+1. parse roadmap task metadata;
+2. validate the roadmap;
+3. schedule tasks according to dependencies;
+4. optionally create or update GitHub Issues and Projects.
 
-The roadmap workflow is responsible for:
+The workflow supports a dry-run mode so that parsing and scheduling can be
+validated before GitHub resources are modified.
 
-1. Reading a roadmap from the caller repository.
-2. Parsing task metadata.
-3. Scheduling tasks while respecting dependencies and parallelism.
-4. Creating or updating GitHub Issues.
-5. Creating or updating an organization-owned GitHub Project.
-6. Creating and maintaining project fields and roadmap metadata.
-7. Applying relationships such as dependencies.
+### Documentation
 
-The implementation is centralized so improvements can be released through the reusable workflow version selected by each project.
+The implementation-specific documentation for each workflow should live
+alongside the workflow implementation.
 
-## Configuration
+For the Roadmap to GitHub Project workflow, document:
 
-Typical organization-level configuration:
+- supported inputs;
+- expected roadmap structure;
+- required secrets;
+- dry-run behaviour;
+- apply behaviour;
+- generated files;
+- permissions;
+- dependency and scheduling rules;
+- troubleshooting;
+- version-specific changes.
 
-```text
-ROADMAP_PROJECT_OWNER=Ulvea-OCT
-ROADMAP_PROJECT_OWNER_TYPE=organization
-```
+## Secrets and Authentication
 
-The target repository should normally come from:
+Secrets required by a workflow should be documented by that workflow.
 
-```text
-GITHUB_REPOSITORY
-```
-
-rather than being hard-coded.
-
-If the automation requires a GitHub token, use an organization secret such as:
+For the Roadmap to GitHub Project workflow, the project integration uses:
 
 ```text
 ROADMAP_PROJECT_TOKEN
 ```
 
-Centralizing a secret does not increase the permissions of the underlying token. The token must still have access to every repository and organization resource required by the automation.
+The recommended configuration is an Organization Secret in `Ulvea-OCT`.
 
-For a larger organization, consider using a GitHub App instead of a repository-scoped PAT.
-
-## Access and security
-
-`OCT-Workflows` is infrastructure and should be protected accordingly.
-
-Recommended controls include:
-
-- Pull requests required for changes to `main`.
-- At least one approval.
-- Required CI checks once stable checks exist.
-- Conversation resolution.
-- No force pushes.
-- No branch deletion.
-- Limited administrative bypass.
-- Additional security checks as the organization matures.
-
-Organization-level rulesets should provide the common baseline. Repository-specific rulesets may add stricter requirements.
-
-## Relationship with OCT-Template
-
-`OCT-Template` provides the initial repository structure and caller workflows.
-
-It should not contain copies of the Python implementation from this repository.
-
-Example caller workflow:
+Consuming repositories should use:
 
 ```yaml
-name: Roadmap
-
-on:
-  push:
-    paths:
-      - "roadmaps/**"
-  workflow_dispatch:
-
-jobs:
-  roadmap:
-    uses: Ulvea-OCT/OCT-Workflows/.github/workflows/roadmap.yml@v1
-    secrets: inherit
+secrets: inherit
 ```
 
-Changes to `OCT-Template` do not retroactively modify repositories previously created from it. Ongoing shared behavior must therefore live in `OCT-Workflows`.
+when the reusable workflow is designed to receive inherited secrets.
 
-## Development workflow
+Repository-level secrets with the same name should be avoided unless an
+explicit repository-specific override is required.
 
-A typical change follows this process:
+## Adding a New Workflow
 
-1. Create a branch in `OCT-Workflows`.
-2. Implement or update the reusable workflow/action.
-3. Test the workflow against a suitable project repository.
-4. Open a pull request.
-5. Merge into `main`.
-6. Update the relevant version tag when releasing a compatible change.
-7. Create a new major version for breaking changes.
+When adding a new shared workflow:
 
-## Related repositories
+1. Add the reusable workflow under `.github/workflows/`.
+2. Add any supporting composite action under `.github/actions/`.
+3. Add supporting scripts and dependencies.
+4. Document the workflow.
+5. Test the workflow independently.
+6. Create a version tag.
+7. Update the workflow inventory in this README.
+8. Update the consuming templates when the new workflow is intended to be
+   part of the standard template.
 
-- **OCT-Template** — repository bootstrap/template.
-- **Project repositories** — repositories consuming the framework.
+A new workflow should have a clear versioning strategy before it is consumed
+by project repositories.
 
-## Status
+## Relationship with the Project Template
 
-This repository is the central automation layer for the Ulvea-OCT GitHub repository architecture.
+The standard project template is maintained separately:
+
+```text
+template-repo-v1.0
+```
+
+The template documents **which versions of shared workflows it consumes**.
+
+This repository documents **how those workflows work and are maintained**.
+
+This separation avoids duplicating technical workflow documentation across
+project repositories.
+
+## Development Principles
+
+Shared workflows should:
+
+- be explicitly versioned;
+- avoid hidden dependencies on individual project repositories;
+- expose clear inputs and outputs;
+- document required permissions and secrets;
+- support safe validation where practical;
+- keep implementation centralized;
+- preserve backwards compatibility within a version where possible.
+
+## Release Checklist
+
+Before publishing a workflow version:
+
+```text
+1. Validate workflow syntax
+        ↓
+2. Test reusable workflow
+        ↓
+3. Test composite action(s)
+        ↓
+4. Test with a consuming repository
+        ↓
+5. Verify secrets and permissions
+        ↓
+6. Create/update version tag
+        ↓
+7. Update workflow inventory
+```
