@@ -125,6 +125,38 @@ runs:
 
         echo "$response"
 
+    - name: Show parsed roadmap
+      if: ${{ inputs.dry-run == true }}
+      shell: bash
+      run: |
+        echo "# Roadmap Parsing Result" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+
+        for json in .roadmap-build/parsed/*.json; do
+          echo "## $(basename "$json")" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat "$json" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+        done
+
+    - name: Show scheduled roadmap
+      if: ${{ inputs.dry-run == true }}
+      shell: bash
+      run: |
+        echo "# Roadmap Scheduling Result" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+
+        for json in .roadmap-build/scheduled/*.json; do
+          echo "## $(basename "$json")" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat "$json" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+        done
+
     - name: Apply roadmaps
       if: ${{ inputs.dry-run != 'true' }}
       shell: bash
