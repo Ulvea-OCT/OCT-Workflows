@@ -42,6 +42,15 @@ jobs:
 
           cat /tmp/user.json
 
+      - name: Verify token fingerprint
+        shell: bash
+        env:
+          ROADMAP_PROJECT_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
+        run: |
+          echo "Token present: ${ROADMAP_PROJECT_TOKEN:+YES}"
+          echo "Token length: ${#ROADMAP_PROJECT_TOKEN}"
+          printf '%s' "$ROADMAP_PROJECT_TOKEN" | sha256sum
+
       - name: Verify token in runner
         shell: bash
         env:
