@@ -126,7 +126,6 @@ runs:
         echo "$response"
 
     - name: Show parsed roadmap
-      if: ${{ inputs.dry-run == true }}
       shell: bash
       run: |
         echo "# Roadmap Parsing Result" >> "$GITHUB_STEP_SUMMARY"
@@ -142,7 +141,6 @@ runs:
         done
 
     - name: Show scheduled roadmap
-      if: ${{ inputs.dry-run == true }}
       shell: bash
       run: |
         echo "# Roadmap Scheduling Result" >> "$GITHUB_STEP_SUMMARY"
@@ -170,14 +168,3 @@ runs:
           python "${{ github.action_path }}/scripts/apply-roadmap.py" \
             --json "$json"
         done
-
-    - name: Dry run summary
-      if: ${{ inputs.dry-run == 'true' }}
-      shell: bash
-      run: |
-        echo "=============================================="
-        echo "ROADMAP DRY RUN"
-        echo "=============================================="
-        echo "No GitHub Issues or Projects were modified."
-        echo "Parsed and scheduled roadmap files:"
-        ls -la .roadmap-build/scheduled/
