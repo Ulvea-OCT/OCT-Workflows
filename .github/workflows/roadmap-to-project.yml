@@ -25,44 +25,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Verify organization secret
-        shell: bash
-        env:
-          ROADMAP_PROJECT_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
-        run: |
-          echo "Token present: ${ROADMAP_PROJECT_TOKEN:+YES}"
-          echo "Token length: ${#ROADMAP_PROJECT_TOKEN}"
-
-          curl -sS \
-            -o /tmp/user.json \
-            -w "HTTP_STATUS:%{http_code}\n" \
-            -H "Authorization: Bearer $ROADMAP_PROJECT_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/user
-
-          cat /tmp/user.json
-
-      - name: Verify token fingerprint
-        shell: bash
-        env:
-          ROADMAP_PROJECT_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
-        run: |
-          echo "Token present: ${ROADMAP_PROJECT_TOKEN:+YES}"
-          echo "Token length: ${#ROADMAP_PROJECT_TOKEN}"
-          printf '%s' "$ROADMAP_PROJECT_TOKEN" | sha256sum
-
-      - name: Verify token in runner
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
-        run: |
-          echo "Testing token against GitHub API..."
-          gh api user
-          echo "Testing GraphQL..."
-          gh api graphql -f query='{ viewer { login } }'
-
       - name: Run Roadmap to Project
-        uses: Ulvea-OCT/OCT-Workflows/.github/actions/roadmap-to-project@v0.1
+        uses: Ulvea-OCT/OCT-Workflows/.github/actions/roadmap-to-project@v1.0
         env:
           ROADMAP_PROJECT_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
         with:
